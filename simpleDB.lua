@@ -73,7 +73,7 @@
 -------------------
 --CREATE A DOMAIN--
 -------------------
--- DB:createDomain("hello")
+-- DB:createDomain("domainName")
 
 
 
@@ -86,7 +86,7 @@
 -------------------
 --DELETE A DOMAIN--
 -------------------
--- DB:deleteDomain(domainName)
+-- DB:deleteDomain("domainName")
 
 
 
@@ -94,7 +94,7 @@
 ---------------------
 -- DOMAIN META DATA--
 ---------------------
--- DB:domainMetaData(domainname)
+-- DB:domainMetaData("domainName")
 
 
 ----------------------
@@ -102,9 +102,9 @@
 ----------------------
 -- local params = 
 	-- {
-	-- domain = "sample",
-	-- item = "jmsatheesh",
-	-- attributes = {email2 = "satheeshrulzz"}
+	-- domain = "domainName",
+	-- item = "itemName",
+	-- attributes = {name1 = "value",name2 = "value"}
 	-- }
 
 -- DB:putAttributes(params)
@@ -117,12 +117,12 @@
 ------------------
 -- local params = 
 	-- {
-	-- domain = "sample",
-	-- item = "jmsatheesh",
-	-- attributes = {"email2","Hello","bye"},
+	-- domain = "domainName",
+	-- item = "itemName",
+	-- attributes = {"name1","name2"},
 	-- }
 
--- DB:getAttributes(parameters)
+-- DB:getAttributes(params)
 
 
 
@@ -131,9 +131,9 @@
 ---------------------
 -- local params = 
 	-- {
-	-- domain = "sample",
-	-- item = "jmsatheesh",
-	-- attributes = {email2 = "satheeshrulzz"}
+	-- domain = "domainName",
+	-- item = "itemName",
+	-- attributes = {name1 = "value",name2 = "value"}
 	-- }
 
 -- DB:deleteAttributes(params)

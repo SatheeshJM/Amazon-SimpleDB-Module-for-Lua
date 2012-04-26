@@ -2,8 +2,8 @@
 --INITIALIZE--
 --------------
 
-local aKey = "" 						--ACCESS_KEY_ID
-local sKey = ""							--SECRET_ACCESS_KEY 
+local aKey = "" 	--ACCESS_KEY_ID
+local sKey = ""		--SECRET_ACCESS_KEY 
 local function listener(event)
 	print(event.name)
 	print(event.response)
@@ -22,7 +22,7 @@ local DB = simpleDB.newDB(aKey,sKey,listener)
 -------------------
 --CREATE A DOMAIN--
 -------------------
--- DB:createDomain(domainName)
+-- DB:createDomain("domainName")
 
 
 
@@ -35,15 +35,14 @@ local DB = simpleDB.newDB(aKey,sKey,listener)
 -------------------
 --DELETE A DOMAIN--
 -------------------
--- DB:deleteDomain(domainName)
-
+-- DB:deleteDomain("domainName")
 
 
 
 ---------------------
 -- DOMAIN META DATA--
 ---------------------
--- DB:domainMetaData(domainname)
+-- DB:domainMetaData("domainName")
 
 
 
@@ -52,9 +51,9 @@ local DB = simpleDB.newDB(aKey,sKey,listener)
 ---------------------
 local params = 
 	{
-	domain = "sample",
-	item = "jmsatheesh",
-	attributes = {email2 = "satheeshrulzz"}
+	domain = "domainName",
+	item = "itemName",
+	attributes = {name1 = "value",name2 = "value"}
 	}
 
 -- DB:putAttributes(params)
@@ -66,11 +65,11 @@ local params =
 --GET ATTRIBUTES--
 ------------------
 local params = 
-	{
-	domain = "sample",
-	item = "jmsatheesh",
-	attributes = {"email2","Hello","bye"},
-	}
+        {
+        domain = "domainName",
+        item = "itemName",
+        attributes = {"name1","name2"},
+        }
 
 -- DB:getAttributes(params)
 
@@ -80,15 +79,10 @@ local params =
 --DELETE ATTRIBUTES--
 ---------------------
 local params = 
-	{
-	domain = "sample",
-	item = "jmsatheesh",
-	attributes = {email2 = "satheeshrulzz"}
-	}
+        {
+        domain = "domainName",
+        item = "itemName",
+        attributes = {name1 = "value",name2 = "value"}
+        }
 
 -- DB:deleteAttributes(params)
-
-
-
-
-DB:domainMetaData("sample")
