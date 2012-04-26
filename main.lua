@@ -5,9 +5,12 @@
 local aKey = "" 	--ACCESS_KEY_ID
 local sKey = ""		--SECRET_ACCESS_KEY 
 local function listener(event)
-	print(event.name)
-	print(event.response)
-	print(event.result)
+				
+	print(event.response)		--Response from Amazon
+	
+	--Following parameters for listDomains(), getAttributes() and domainMetaData() only
+	print(event.result)			--Data returned by Amazon.  If failure, event.response is nil
+	print(event.name)			--"LIST DOMAINS", "DOMAIN META DATA" or "GET ATTRIBUTES"
 end
 
 local simpleDB = require "simpleDB"
