@@ -8,11 +8,6 @@ local function listener(event)
 	print(event.name)
 	print(event.response)
 	print(event.result)
-	
-	for i,v in pairs(event.result) do 
-		print(i,v)
-	end 
-	
 end
 
 local simpleDB = require "simpleDB"
