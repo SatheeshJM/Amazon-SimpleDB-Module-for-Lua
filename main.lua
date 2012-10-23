@@ -1,7 +1,7 @@
 
 --AWS Security Credentials
 
-local aKey = "ACCESS_KEY_ID_HERE" 		--ACCESS_KEY_ID
+local aKey = "ACCESS_KEY_ID_HERE" 	--ACCESS_KEY_ID
 local sKey = "SECRET_ACCESS_KEY_HERE"	--SECRET_ACCESS_KEY 
 
 
