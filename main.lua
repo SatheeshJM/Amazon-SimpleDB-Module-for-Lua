@@ -1,17 +1,31 @@
---------------
---INITIALIZE--
---------------
 
-local aKey = "" 	--ACCESS_KEY_ID
-local sKey = ""		--SECRET_ACCESS_KEY 
+--AWS Security Credentials
+
+local aKey = "ACCESS_KEY_ID_HERE" 		--ACCESS_KEY_ID
+local sKey = "SECRET_ACCESS_KEY_HERE"	--SECRET_ACCESS_KEY 
+
+
+--Listener Function 
+
 local function listener(event)
 				
-	print(event.response)		--Response from Amazon
+	--event.response		-- The actual Response from Amazon
+	--event.isError			-- Network error if any 
+	--event.name			-- The name of the operation(nil if amazon throws an error)
 	
-	--Following parameters for listDomains(), getAttributes() and domainMetaData() only
-	print(event.result)			--Data returned by Amazon.  If failure, event.response is nil
-	print(event.name)			--"LIST DOMAINS", "DOMAIN META DATA" or "GET ATTRIBUTES"
+	--event.result			
+	--This parameter is for select(), listDomains(), getAttributes() and domainMetaData() operations only
+	--XML data returned by Amazon is parsed by the lua library and is stored as a table 
+	--use pairs to iterate through event result to see what values have been returned 	
+	--this value is nil for other operations. It is also nil if the supported operations fail.
+		
+	print(event.name)
+	if event.result then 
+		for i,v in pairs(event.result) do print(i,v) end 
+	end 	
 end
+
+
 
 local simpleDB = require "simpleDB"
 local DB = simpleDB.newDB(aKey,sKey,listener)
@@ -20,67 +34,133 @@ local DB = simpleDB.newDB(aKey,sKey,listener)
 -------------------
 --CREATE A DOMAIN--
 -------------------
--- DB:createDomain("domainName")
 
+-- DB:createDomain	
+	-- {
+	-- DomainName = "domain_name"	
+	-- }
+	
 
 
 --------------------
 --LIST ALL DOMAINS--
---------------------
--- DB:listDomains()
+--------------------	
+	
+-- DB:listDomains
+	-- {
+	-- MaxNumberOfDomains = 100,	--[OPTIONAL]
+	-- nextToken = "next_token"		--[OPTIONAL]
+	-- }
 
-
+	
+	
+	
 -------------------
 --DELETE A DOMAIN--
 -------------------
--- DB:deleteDomain("domainName")
 
+-- DB:deleteDomain	
+	-- {
+	-- DomainName = "domain_name"	
+	-- }
 
-
+	
+	
+	
 ---------------------
 -- DOMAIN META DATA--
 ---------------------
--- DB:domainMetaData("domainName")
+
+-- DB:domainMetaData
+-- {
+-- DomainName = "domain_name"
+-- }
 
 
 
+	
 ---------------------
 --PUT ATTRIBUTES-----
 ---------------------
-local params = 
-	{
-	domain = "domainName",
-	item = "itemName",
-	attributes = {name1 = "value",name2 = "value"}
-	}
-
--- DB:putAttributes(params)
 
 
+-- local Attribute = 
+	-- {
+	-- {Name = "name1",Value="value11"},
+	-- {Name = "name2",Value="value21"},
+	-- {Name = "name3",Value="value31"},
+	-- {Name = "name4",Value="value41"},
+	-- }
 
 
+-- DB:putAttributes
+	-- {
+	-- DomainName = "domain_name",
+	-- ItemName = "item_name",
+	-- Attribute = Attribute,
+	-- }
+	
+
+	
+	
+	
 ------------------
 --GET ATTRIBUTES--
 ------------------
-local params = 
-        {
-        domain = "domainName",
-        item = "itemName",
-        attributes = {"name1","name2"},
-        }
 
--- DB:getAttributes(params)
+-- local AttributeName = 
+	-- {
+	-- "name1",
+	-- "name2",
+	-- "name3",
+	-- "name4",
+	-- }
 
 
+-- DB:getAttributes
+	-- {
+	-- DomainName = "domain_name",
+	-- ItemName = "item_name",
+	-- AttributeName = AttributeName,--[OPTIONAL]
+	-- }
+	
 
+
+	
+	
+	
+	
 ---------------------
 --DELETE ATTRIBUTES--
 ---------------------
-local params = 
-        {
-        domain = "domainName",
-        item = "itemName",
-        attributes = {name1 = "value",name2 = "value"}
-        }
 
--- DB:deleteAttributes(params)
+-- local Attribute = 
+	-- {
+	-- {Name = "name1",Value="value1"},
+	-- }
+
+
+-- DB:deleteAttributes
+	-- {
+	-- DomainName = "domain_name",
+	-- ItemName = "item_name",
+	-- Attribute = Attribute,	--[OPTIONAL]
+	-- }
+	
+
+
+
+	
+------------------
+--SELECT--------
+----------------
+
+-- local SelectExpression = "select * from domainName"
+-- DB:select 
+	-- {
+	-- SelectExpression = SelectExpression,
+	-- }
+
+	
+
+

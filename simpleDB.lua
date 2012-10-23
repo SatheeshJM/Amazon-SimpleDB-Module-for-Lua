@@ -27,124 +27,39 @@
 --
 -- Overview: 
 --
---    This module supports access to the Amazon SimpleDB Service, a
---    popular cloud-based storage platform, from Corona SDK applications.
+--    This module provides a Lua based API to access Amazon's SimpleDB service
 --
 --
--- Version : 1.0 
+-- Version : 1.1
+--
+--	Changelog
+--		1.1  Breaking changes from 1.0. Added select operation. Also changed the way SimpleDB operations are performed
 --
 -- Operations Available 
 -- 		GetAttributes
 --		PutAttributes
 --		DeleteAttributes
+--		Select
 --
 --		CreateDomain 
 --		ListDomains	
 --		DeleteDomain
 --		DomainMetadata
+--		
 --
--- Operations Not Available
+-- Major Operations Not supported
 --		BatchDeleteAttributes
 --		BatchPutAttributes	
---		Select
+--
+--	Minor operations not supported (Dunno how often these are used. Feel free to add these functions)
+--		Expected parameter(Name,Values and Exists) of GetAttributes
+--		Expected parameter(Name,Values and Exists) of PutAttributes
+--		Replace in Attribute Parameter of PutAttributes
+--		ConsistentRead and nextToken parameters of Select
+--		ConsistentRead parameter of GetAttributes
+--		
 --	
---
---
---
--- Usage:
---
---
---------------
---INITIALIZE--
---------------
 
--- local aKey = "" 		--ACCESS_KEY_ID
--- local sKey = ""		--SECRET_ACCESS_KEY 
--- local function listener(event)
---		print(event.response)		--Response from Amazon
-	
---		Following parameters for listDomains(), getAttributes() and domainMetaData() only
---		print(event.result)			--Data returned by Amazon.  If failure, event.response is nil
---		print(event.name)			--"LIST DOMAINS", "DOMAIN META DATA" or "GET ATTRIBUTES"
--- end
-
--- local simpleDB = require "simpleDB"
--- local DB = simpleDB.newDB(aKey,sKey,listener)
-
-
--------------------
---CREATE A DOMAIN--
--------------------
--- DB:createDomain("domainName")
-
-
-
---------------------
---LIST ALL DOMAINS--
---------------------
--- DB:listDomains()
-
-
--------------------
---DELETE A DOMAIN--
--------------------
--- DB:deleteDomain("domainName")
-
-
-
-
----------------------
--- DOMAIN META DATA--
----------------------
--- DB:domainMetaData("domainName")
-
-
-----------------------
---PUT ATTRIBUTES------
-----------------------
--- local params = 
-	-- {
-	-- domain = "domainName",
-	-- item = "itemName",
-	-- attributes = {name1 = "value",name2 = "value"}
-	-- }
-
--- DB:putAttributes(params)
-
-
-
-
-------------------
---GET ATTRIBUTES--
-------------------
--- local params = 
-	-- {
-	-- domain = "domainName",
-	-- item = "itemName",
-	-- attributes = {"name1","name2"},
-	-- }
-
--- DB:getAttributes(params)
-
-
-
----------------------
---DELETE ATTRIBUTES--
----------------------
--- local params = 
-	-- {
-	-- domain = "domainName",
-	-- item = "itemName",
-	-- attributes = {name1 = "value",name2 = "value"}
-	-- }
-
--- DB:deleteAttributes(params)
-
-
-
---
---====================================================================--
---
 
 
 local crypto = require("crypto")
@@ -154,12 +69,42 @@ local xml = require("xml").newParser()
 local tostring = tostring 
 local os = os 
 local pairs = pairs
+local string = string 
 local setmetatable = setmetatable
 local network = network
 
 
+local MapOfResponseToOperationName = 
+		{
+		ListDomainsResponse = "LIST_ALL_DOMAINS",
+		CreateDomainResponse = "CREATE_DOMAIN",
+		DeleteDomainResponse = "DELETE_DOMAIN",
+		DomainMetadataResponse = "DOMAIN_METADATA",
+		
+		PutAttributesResponse = "PUT_ATTRIBUTES",
+		GetAttributesResponse = "GET_ATTRIBUTES",
+		BatchPutAttributesResponse = "BATCH_PUT_ATTRIBUTES",
+		BatchDeleteAttributesResponse = "BATCH_DELETE_ATTRIBUTES",
+		DeleteAttributesResponse = "DELETE_ATTRIBTUES",
+		
+		SelectResponse = "SELECT",
+		}
+		
 
-local function twoDigit(n)
+
+local function 
+url_encode(str)
+  if (str) then
+    str = str:gsub("([^%w ])",
+        function (c) return string.format ("%%%02X", c:byte()) end)
+	str = str:gsub(" ","%%20")
+  end
+  return str	
+end
+
+
+local function 
+twoDigit(n)
     local r = tostring(n)
     if r:len() < 2 then
         r = "0"..r;
@@ -167,19 +112,26 @@ local function twoDigit(n)
     return r
 end
  
-local function getTime()
+local function 
+getTime()
     local date = os.date("!*t")
     return date.year.."-"..twoDigit(date.month).."-"..twoDigit(date.day).."T"..twoDigit(date.hour).."%3A"..twoDigit(date.min).."%3A"..twoDigit(date.sec).."Z"
 end
 
-local function sha1_hmac( key, text )
+local function 
+sha1_hmac( key, text )
     return crypto.hmac(crypto.sha1, text, key, true)
 end
+
+
+
 
 
 local function parse(xmlData)
 	local response = xml:ParseXmlText(xmlData)
 	local responseType = response.name 
+	
+	local operationName = MapOfResponseToOperationName[responseType]
 	local final = {}
 	
 	if responseType == "ListDomainsResponse" then 
@@ -214,12 +166,126 @@ local function parse(xmlData)
 			local Value = MetadataName.value 
 			final[Name] = Value 
 		end 
-	else 
+	elseif responseType == "SelectResponse" then 
+		local SelectResponse = response 
+		local SelectResult = response.child[1]
+		local ItemNames = SelectResult.child 
+		for i=1,#ItemNames do 
+			local Item = ItemNames[i]
+			local ItemName = Item.child[1].value
+			final[ItemName] = {}
+			
+			for i=2,#Item.child do 
+				local NameValuePair = Item.child[i]
+				local name = NameValuePair.child[1].value
+				local value = NameValuePair.child[2].value
+				
+				local pair = {name = name,value = value}
+				final[ItemName][#final[ItemName]+1] = pair
+			end 	
+		end 
+	else
 		final = nil 
+	end 
+	
+	return operationName,final 
+end 
+
+
+
+
+
+
+
+
+
+local function convertTableToListOfKeyValuePairs(tab,baseTable)
+	
+	--key may be Attribute or Expected
+	
+	
+	local final = ""
+	
+	if baseTable == "Attribute" then 
+		for i=1,#tab do 
+			local order = {"Name","Value"}
+			local element = tab[i]
+			for j=1,#order do
+				local key = order[j]
+				local value = element[key]
+				if value~=nil then 
+					final = final..baseTable.."."..i.."."..key.."="..tostring(value).."&"
+				end
+			end 
+		end 
+	elseif baseTable == "AttributeName" then 
+		for i=1,#tab do 
+			local element = tab[i]
+			final = final..baseTable.."."..i.."="..tostring(element).."&"
+		end 
 	end 
 	
 	return final 
 end 
+
+
+local function convertTableToKeyValuePairs(tab,type)
+	local final = ""
+	
+	local order 
+	if type ==1 then 
+		order = {"AWSAccessKeyId","Action","SelectExpression","ConsistentRead","AttributeName","Attribute","DomainName","ItemName","MaxNumberOfDomains","NextToken","SignatureMethod","SignatureVersion","Timestamp","Version"}
+	elseif type == 2 then 
+		order = {"Action","Attribute","AWSAccessKeyId","SelectExpression","ConsistentRead","AttributeName","DomainName","ItemName","MaxNumberOfDomains","NextToken","SignatureMethod","SignatureVersion","Timestamp","Version"}
+	end 
+	
+	for i=1,#order do 
+		local key = order[i]
+		local value = tab[key]
+
+		if value~=nil then 
+			if key == "Attribute" or key=="AttributeName" then 
+				final = final .. convertTableToListOfKeyValuePairs(value,key)
+			else
+				final = final..key.."="..tostring(value).."&"
+			end 
+		end
+	end 
+	
+	final = final:sub(1,-2)
+	
+	return final 
+end 
+
+
+local function generateURL(params)
+
+	params.SignatureMethod = "HmacSHA1"
+	params.SignatureVersion = 2
+	params.Timestamp = getTime()
+	params.Version = "2009-04-15"
+	
+		
+	local sKey = params.AWSSecretKeyId
+
+	--generate Key Value pairs 
+	local keyValuePairs1 = convertTableToKeyValuePairs(params,1)
+	local keyValuePairs2 = convertTableToKeyValuePairs(params,2)
+	
+	--generate signature
+	local toSign = "GET\nsdb.amazonaws.com\n/\n"..keyValuePairs1
+	local signature = mime.b64(sha1_hmac(sKey, toSign)) 
+	
+	
+	--generate url
+	local myURL = "https://sdb.amazonaws.com/?"..keyValuePairs2.."&Signature="..signature
+	
+	
+	return myURL
+end 
+
+
+
 
 
 
@@ -238,86 +304,95 @@ function DB.newDB(aKey,sKey,listener)
 	
 	local db = {}
 	setmetatable(db,DB)
+	
 	db.aKey = aKey
 	db.sKey = sKey
-	db.listener = listener
+	db.listener = function(event)
+
+			local isError = event.isError
+			local listener = listener or 
+								function() end 
+			
+			if isError then 
+				listener{isError = true}
+			else 
+				event.name,event.result = parse(event.response)
+				listener(event)
+			end 
+	end 
+	
+	
 	return db 
 end 
 
 
 
-function DB:createDomain(name)
-	
-	local aKey = self.aKey
-	local sKey = self.sKey
-	
-    local timeStamp = getTime()
-    local toSign = "GET\nsdb.amazonaws.com\n/\nAWSAccessKeyId="..aKey.."&Action=CreateDomain&DomainName="..name.."&SignatureMethod=HmacSHA1&SignatureVersion=2&Timestamp="..timeStamp.."&Version=2009-04-15"
-    local signature = mime.b64(sha1_hmac(sKey, toSign))  
-    local myURL = "https://sdb.amazonaws.com/?Action=CreateDomain&AWSAccessKeyId="..aKey.."&DomainName="..name.."&SignatureVersion=2&SignatureMethod=HmacSHA1&Timestamp="..timeStamp.."&Version=2009-04-15&Signature="..signature
 
+function DB:createDomain(params)
+
+	local params = params or {}
+	
+	local myURL = generateURL
+		{
+		AWSAccessKeyId = self.aKey,
+		AWSSecretKeyId = self.sKey,
+		Action = "CreateDomain",
+		DomainName = params.DomainName,
+		}
+ 
     network.request( myURL, "GET", self.listener)
  
 end
 
 
-function DB:listDomains()
+function DB:listDomains(params)
 	
-	local aKey = self.aKey
-	local sKey = self.sKey
+	local params = params or {}
 	
-    local timeStamp = getTime()
-    local toSign = "GET\nsdb.amazonaws.com\n/\nAWSAccessKeyId="..aKey.."&Action=ListDomains&SignatureMethod=HmacSHA1&SignatureVersion=2&Timestamp="..timeStamp.."&Version=2009-04-15"
-    local signature = mime.b64(sha1_hmac(sKey, toSign))  
-    local myURL = "https://sdb.amazonaws.com/?Action=ListDomains&AWSAccessKeyId="..aKey.."&SignatureVersion=2&SignatureMethod=HmacSHA1&Timestamp="..timeStamp.."&Version=2009-04-15&Signature="..signature
-
-	
-	local function 
-	networkListener(event)
-		if event.response then 
-			event.result = parse(event.response)
-		end 
-		event.name = "LIST DOMAINS"
-		self.listener(event)
-	end 
-    network.request( myURL, "GET", networkListener )
+	local myURL = generateURL
+		{
+		AWSAccessKeyId = self.aKey,
+		AWSSecretKeyId = self.sKey,
+		Action = "ListDomains",
+		MaxNumberOfDomains = params.MaxNumberOfDomains,
+		NextToken = params.NextToken,
+		}
+		
+		
+    network.request( myURL, "GET", self.listener )
  
 end
 
 
-function DB:deleteDomain(domain)
-	local aKey = self.aKey
-	local sKey = self.sKey
-	
-    local timeStamp = getTime()
-    local toSign = "GET\nsdb.amazonaws.com\n/\nAWSAccessKeyId="..aKey.."&Action=DeleteDomain&DomainName="..domain.."&SignatureMethod=HmacSHA1&SignatureVersion=2&Timestamp="..timeStamp.."&Version=2009-04-15"
-    local signature = mime.b64(sha1_hmac(sKey, toSign))  
-    local myURL = "https://sdb.amazonaws.com/?Action=DeleteDomain&AWSAccessKeyId="..aKey.."&DomainName="..domain.."&SignatureVersion=2&SignatureMethod=HmacSHA1&Timestamp="..timeStamp.."&Version=2009-04-15&Signature="..signature
+function DB:deleteDomain(params)
 
+	local params = params or {}
+	
+	local myURL = generateURL
+		{
+		AWSAccessKeyId = self.aKey,
+		AWSSecretKeyId = self.sKey,
+		Action = "DeleteDomain",
+		DomainName = params.DomainName,
+		}
+		
     network.request( myURL, "GET", self.listener)
 end 
 
 
 
-function DB:domainMetaData(domain)
-	local aKey = self.aKey
-	local sKey = self.sKey
+function DB:domainMetaData(params)
+	local params = params or {}
 	
-    local timeStamp = getTime()
-    local toSign = "GET\nsdb.amazonaws.com\n/\nAWSAccessKeyId="..aKey.."&Action=DomainMetadata&DomainName="..domain.."&SignatureMethod=HmacSHA1&SignatureVersion=2&Timestamp="..timeStamp.."&Version=2009-04-15"
-    local signature = mime.b64(sha1_hmac(sKey, toSign))  
-    local myURL = "https://sdb.amazonaws.com/?Action=DomainMetadata&AWSAccessKeyId="..aKey.."&DomainName="..domain.."&SignatureVersion=2&SignatureMethod=HmacSHA1&Timestamp="..timeStamp.."&Version=2009-04-15&Signature="..signature
-
-	
-	local function 
-	networkListener(event)
-		if event.response then 
-			event.result = parse(event.response)
-		end 
-		event.name = "DOMAIN META DATA"
-		self.listener(event)
-	end 
-    network.request( myURL, "GET", networkListener)
+	local myURL = generateURL
+		{
+		AWSAccessKeyId = self.aKey,
+		AWSSecretKeyId = self.sKey,
+		Action = "DomainMetadata",
+		DomainName = params.DomainName,
+		}
+		
+    network.request( myURL, "GET", self.listener)
 end 
 
 
@@ -325,35 +400,22 @@ end
 
 function DB:getAttributes(params)
  
-	local aKey = self.aKey
-	local sKey = self.sKey
-	
-	local domain = params.domain 
-	local item = params.item 
-	local attributes = params.attributes or {}
-	local attributeString = ""
-	
-	for i=1,#attributes do
-		local str = "&AttributeName."..i.."="..attributes[i]
-		attributeString = attributeString..str 
-	end 
-	
-    local timeStamp = getTime()
-    local toSign = "GET\nsdb.amazonaws.com\n/\nAWSAccessKeyId="..aKey.."&Action=GetAttributes"..attributeString.."&DomainName="..domain.."&ItemName="..item.."&SignatureMethod=HmacSHA1&SignatureVersion=2&Timestamp="..timeStamp.."&Version=2009-04-15" 
-    local signature = mime.b64(sha1_hmac(sKey, toSign))     
-    local myURL = "https://sdb.amazonaws.com/?Action=GetAttributes&AWSAccessKeyId="..aKey..attributeString.."&DomainName="..domain.."&ItemName="..item.."&SignatureVersion=2&SignatureMethod=HmacSHA1&Timestamp="..timeStamp.."&Version=2009-04-15&Signature="..signature
-    
+		
+	local params = params or {}
 	
 	
-	local function 
-	networkListener(event)
-		if event.response then 
-			event.result = parse(event.response)
-		end 
-		event.name = "GET ATTRIBUTES"
-		self.listener(event)
-	end 
-    network.request( myURL, "GET", networkListener )
+	local myURL = generateURL
+		{
+		AWSAccessKeyId = self.aKey,
+		AWSSecretKeyId = self.sKey,
+		Action = "GetAttributes",
+		DomainName = params.DomainName,
+		ItemName = params.ItemName,
+		AttributeName = params.AttributeName,
+		ConsistentRead = params.ConsistentRead,
+		}
+
+    network.request( myURL, "GET", self.listener )
  
 end
 
@@ -363,28 +425,20 @@ end
 
 function DB:putAttributes(params)
 
-	local aKey = self.aKey
-	local sKey = self.sKey
-	
-	local domain = params.domain 
-	local item = params.item 
-	local attributes = params.attributes or {}
-	local attributeString = ""
-	
-	local i=0
-	for name,value in pairs(attributes) do
-		i=i+1 
-		local str = "&Attribute."..i..".Name="..name.."&Attribute."..i..".Value="..value
-		attributeString = attributeString..str 
-	end 
-	
-	
-	local timeStamp = getTime()
-    local toSign = "GET\nsdb.amazonaws.com\n/\nAWSAccessKeyId="..aKey.."&Action=PutAttributes"..attributeString.."&DomainName="..domain.."&ItemName="..item.."&SignatureMethod=HmacSHA1&SignatureVersion=2&Timestamp="..timeStamp.."&Version=2009-04-15"
-    local signature = mime.b64(sha1_hmac(sKey, toSign))       
-    local myURL = "https://sdb.amazonaws.com/?Action=PutAttributes"..attributeString.."&AWSAccessKeyId="..aKey.."&DomainName="..domain.."&ItemName="..item.."&SignatureVersion=2&SignatureMethod=HmacSHA1&Timestamp="..timeStamp.."&Version=2009-04-15&Signature="..signature
 
-
+	local params = params or {}
+	
+	
+	local myURL = generateURL
+		{
+		AWSAccessKeyId = self.aKey,
+		AWSSecretKeyId = self.sKey,
+		Action = "PutAttributes",
+		DomainName = params.DomainName,
+		ItemName = params.ItemName,
+		Attribute = params.Attribute,
+		}
+		
     network.request( myURL, "GET", self.listener )
 
 
@@ -393,31 +447,42 @@ end
 
 
 function DB:deleteAttributes(params)
-		local aKey = self.aKey
-	local sKey = self.sKey
-	
-	local domain = params.domain 
-	local item = params.item 
-	local attributes = params.attributes or {}
-	local attributeString = ""
-	
-	local i=0
-	for name,value in pairs(attributes) do
-		i=i+1 
-		local str = "&Attribute."..i..".Name="..name.."&Attribute."..i..".Value="..value
-		attributeString = attributeString..str 
-	end 
-	
-	
-	local timeStamp = getTime()
-    local toSign = "GET\nsdb.amazonaws.com\n/\nAWSAccessKeyId="..aKey.."&Action=DeleteAttributes"..attributeString.."&DomainName="..domain.."&ItemName="..item.."&SignatureMethod=HmacSHA1&SignatureVersion=2&Timestamp="..timeStamp.."&Version=2009-04-15"
-    local signature = mime.b64(sha1_hmac(sKey, toSign))       
-    local myURL = "https://sdb.amazonaws.com/?Action=DeleteAttributes"..attributeString.."&AWSAccessKeyId="..aKey.."&DomainName="..domain.."&ItemName="..item.."&SignatureVersion=2&SignatureMethod=HmacSHA1&Timestamp="..timeStamp.."&Version=2009-04-15&Signature="..signature
 
-
+	local params = params or {}
+	
+	
+	local myURL = generateURL
+		{
+		AWSAccessKeyId = self.aKey,
+		AWSSecretKeyId = self.sKey,
+		Action = "DeleteAttributes",
+		DomainName = params.DomainName,
+		ItemName = params.ItemName,
+		Attribute = params.Attribute,
+		}
+		
     network.request( myURL, "GET", self.listener )
 
 end 
+
+function DB:select(params)
+
+	local params = params or {}
+	
+	local myURL = generateURL
+		{
+		AWSAccessKeyId = self.aKey,
+		AWSSecretKeyId = self.sKey,
+		Action = "Select",
+		SelectExpression = url_encode(params.SelectExpression),
+		ConsistentRead = params.ConsistentRead,
+		NextToken = params.NextToken,
+		}
+		
+
+    network.request( myURL, "GET", self.listener )
+end 
+
 
 
 return DB
